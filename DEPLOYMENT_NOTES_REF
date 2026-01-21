@@ -1,0 +1,305 @@
+PROMPT ARCHITECT – SETUP, BUILD & DEPLOYMENT NOTES
+=================================================
+
+Purpose
+-------
+This document records the exact steps, tools, configs, and fixes used to:
+- Turn a single React component into a working site
+- Style it with Tailwind
+- Deploy it as a static site on GitHub Pages via GitHub Actions
+
+Use this as a reference to:
+- Edit the existing site safely
+- Rebuild the project on a new machine
+- Create a similar static React/Tailwind site in the future
+
+
+STACK OVERVIEW
+--------------
+- Node.js (LTS)
+- Vite (React template)
+- React (client-only, no backend)
+- Tailwind CSS v3
+- lucide-react (icons)
+- GitHub (repo + Pages)
+- GitHub Actions (build & deploy)
+- Hosting: GitHub Pages (static)
+
+
+PROJECT TYPE
+------------
+- Purely static site
+- No API keys
+- No server
+- Prompt generation happens client-side only
+- Output is copied into external tools (Krea, Gemini, etc.)
+
+
+LOCAL SETUP (FROM SCRATCH)
+--------------------------
+
+1) Install Node.js (LTS)
+   - macOS (recommended): via Homebrew
+     brew install node
+   - Verify:
+     node -v
+     npm -v
+
+2) Create project with Vite (React)
+   npm create vite@latest prompt-architect -- --template react
+   cd prompt-architect
+   npm install
+
+3) Install required dependencies
+   npm install lucide-react
+   npm install -D tailwindcss@3.4.17 postcss autoprefixer
+   npx tailwindcss init -p
+
+
+TAILWIND CONFIG (CRITICAL)
+--------------------------
+
+File: tailwind.config.js
+
+IMPORTANT:
+- content MUST NOT be empty
+- This is what fixed the "No utility classes detected" warning
+
+Correct config:
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+
+
+File: src/index.css
+
+REPLACE ALL CONTENT WITH:
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+File: src/main.jsx
+
+Ensure CSS is imported:
+
+import './index.css'
+
+
+REACT APP CODE
+--------------
+- Main app lives in: src/App.jsx
+- The full Prompt Architect React component is pasted there
+- File must be named App.jsx (extension matters)
+- main.jsx must import it as:
+
+import App from './App.jsx'
+
+
+LOCAL DEVELOPMENT
+-----------------
+Run dev server:
+  npm run dev
+
+Expected:
+- Dark UI
+- Tailwind styles applied
+- No Tailwind warnings
+- App works fully client-side
+
+Production sanity check:
+  npm run build
+  npm run preview
+
+
+GITHUB REPOSITORY SETUP
+----------------------
+- Repo name: prompt-architect
+- Public repository
+- Default branch: main
+
+Initial push:
+
+git init
+git add .
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/<USERNAME>/prompt-architect.git
+git push -u origin main
+
+
+AUTHENTICATION NOTE
+-------------------
+GitHub no longer accepts passwords for git push.
+
+Use:
+- GitHub Personal Access Token (classic)
+- Scope required: repo
+
+When prompted for password:
+- Paste the token (input is invisible)
+
+Optional (macOS):
+  git config --global credential.helper osxkeychain
+
+
+VITE CONFIG FOR GITHUB PAGES (CRITICAL)
+--------------------------------------
+GitHub Pages serves under a subpath.
+
+File: vite.config.js
+
+Must include:
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  base: '/prompt-architect/',
+})
+
+IMPORTANT:
+- base MUST match repo name exactly
+- Missing this causes blank site after deploy
+
+
+GITHUB ACTIONS DEPLOYMENT
+------------------------
+
+File: .github/workflows/deploy.yml
+
+This workflow:
+- Installs dependencies
+- Builds the site
+- Uploads dist/
+- Deploys to GitHub Pages
+
+Exact file used:
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/deploy-pages@v4
+
+
+GITHUB PAGES SETTINGS
+--------------------
+Repo → Settings → Pages
+
+- Source: GitHub Actions
+- Do NOT configure Jekyll or Static HTML templates
+- HTTPS enforced by default
+
+First deploy may fail with 404 if Pages wasn’t enabled yet.
+Fix: re-run workflow or push empty commit.
+
+
+FORCING A RE-DEPLOY
+------------------
+If needed:
+
+git commit --allow-empty -m "Trigger Pages deploy"
+git push
+
+
+FINAL LIVE URL
+--------------
+https://<USERNAME>.github.io/prompt-architect/
+
+
+COMMON FAILURE MODES & FIXES
+----------------------------
+
+1) "No utility classes detected"
+   - tailwind.config.js content was empty or wrong
+   - Fix content paths + restart dev server
+
+2) White / blank deployed site
+   - Missing or incorrect Vite base path
+   - Fix base: '/prompt-architect/'
+
+3) GitHub Actions deploy 404
+   - Pages not enabled yet
+   - Enable Pages → GitHub Actions
+   - Re-run workflow
+
+4) lucide-react import errors
+   - npm install lucide-react
+
+5) Styling looks centered / broken
+   - Default Vite CSS not removed
+   - index.css must contain only Tailwind directives
+
+
+EDITING THE SITE LATER
+---------------------
+Typical workflow:
+
+1) Edit src/App.jsx
+2) npm run dev (local preview)
+3) git add .
+4) git commit -m "Describe change"
+5) git push
+6) GitHub Actions auto-deploys
+
+
+REUSING THIS FOR A NEW PROJECT
+------------------------------
+- Repeat Vite + Tailwind steps
+- Copy Tailwind config
+- Copy GitHub Actions workflow
+- Change:
+  - repo name
+  - Vite base path
+  - site content
+
+This setup is intentionally minimal, cheap, and robust.
+
+
+END
